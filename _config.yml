@@ -1,3 +1,5 @@
+# bundle exec jekyll serve
+
 title: Your awesome title
 url: "https://sdpl-oh.github.io/"
 baseurl: ""
