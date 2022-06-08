@@ -21,8 +21,8 @@ plainwhite:
   date_format: "%b %-d, %Y"
   sitemap: true
   search: true
-  dark_mode: true
-  portfolio_image: "assets/portfolio.jpeg"
+  dark_mode: False
+  portfolio_image: "assets/profile.png"
   html_lang: "kr" 
   condensed_mobile:
     - home
