@@ -4,9 +4,15 @@ title:  "블로그 개설 과정"
 date:   2022-06-07 09:00:00 +0530
 categories: Github Blog plainwhite
 ---
-깃허브를 통해 블로그를 개설하는 시간이 꽤나 오래걸렸다.   
+Github를 통해 블로그를 개설하는 시간이 꽤나 오래걸렸다.   
 다른 블로그에 설명이 상세하게 되어있지만, 나는 실행이 안됐다.   
-로컬에서는 잘되고, 깃허브에서는 안되는 요인을 찾아보니 깃허브 홈페이지 Action 중 pages build and deployment 가 안되고 있었다.   
+## 적용 과정
+* Github 홈페이지에서 new repository로 github.io 생성
+* **Github on Desktop** 설치 후 clone
+* [plainwhite]를 해당 repository로 clone
+* **_config.yml** 수정
+
+로컬에서는 잘되고, Github에서는 안되는 요인을 찾아보니 Github 홈페이지 **Action** 중 **pages build and deployment** 가 안되고 있었다.   
 **Build with Jekyll** 과정에서 **theme** 를 찾을 수 없는 문제가 발생
 <p align="center"><img src="https://user-images.githubusercontent.com/41941019/172524258-363c1ce8-c40d-4f5a-8d97-11ec105ac4d8.png"  width="100%"></p>
 
@@ -19,3 +25,6 @@ github-pages 226 | Error:  The plainwhite theme could not be found.
 remote_theme: samarsault/plainwhite-jekyll
 # theme: plainwhite
 ```
+
+
+[plainwhite]: https://github.com/samarsault/plainwhite-jekyll
