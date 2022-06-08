@@ -1,6 +1,7 @@
 @import "ext/fonts";
 @import "ext/normalize";
 @import "syntax";
+@import url('https://fonts.googleapis.com/css?family=Noto+Sans+KR&display=swap');
 
 $linkColor: #0a59b0;
 $mobileW: 768px;
@@ -15,7 +16,7 @@ $leftWidth: 220px;
 }
 
 body {
-  font-family: "Raleway", sans-serif;
+  font-family: "Noto Sans KR", "Raleway", sans-serif;
   font-size: 16px;
   line-height: 1.2em;
   margin: 0;
@@ -164,7 +165,7 @@ main {
 
     a {
       display: block;
-      font-family: 'Merriweather';
+      font-family: "Noto Sans KR", 'Merriweather';
       text-align: center;
       padding: 1rem 0;
       text-decoration: none;
@@ -243,7 +244,7 @@ main {
   padding-left: 30px;
 }
 .post {
-  font-family: "Merriweather", sans-serif;
+  font-family: "Noto Sans KR", "Merriweather", sans-serif;
   font-weight: 300;
   color: #222;
   line-height: 1.9em;
@@ -264,7 +265,7 @@ main {
   h4,
   h5,
   h6 {
-    font-family: Raleway, sans-serif;
+    font-family:  "Noto Sans KR", Raleway, sans-serif;
   }
 }
 .posts-labelgroup {
@@ -292,7 +293,7 @@ table {
   }
   th {
     background-color: #eee;
-    font-family: Raleway;
+    font-family: "Noto Sans KR", Raleway;
   }
 }
 
