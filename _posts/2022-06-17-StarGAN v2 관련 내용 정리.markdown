@@ -1,0 +1,255 @@
+---
+layout: post
+title:  "StarGAN v2 관련 내용 정리"
+date:   2022-06-17 09:00:00 +0530
+categories: GAN StarGAN Generator Discriminator
+---
+네이버 클로바 공식 Github에서 제공되는 코드를 중심으로 내용을 확인해봤다.   
+
+StarGAN v2: Diverse Image Synthesis for Multiple Domains   
+Paper: https://arxiv.org/abs/1912.01865   
+Github: https://github.com/clovaai/stargan-v2   
+<br/>
+
+## 가중치 초기화(Weight Initialization)
+>Restricted Bolzmann Machine(RBM)를 이용하여 신경망의 가중치를 초기화하고 학습하는 방법이 있다.   
+>RBM에서 사용되는 pre-training(사전학습)은 레이어마다 학습 후 고정한 뒤, 다음 레이어를 학습하는 반복과정을 거친다.   
+>이 과정이 끝나면 classifier와 함께 전체 레이어를 학습하여 마무리한다.    
+>초기 사전학습은 과적합 방지수준의 initial point를 설정하기 때문에 효과적인 가중치 초기화라 볼 수 있다.
+
+>현재, 신경망에 대한 연구가 진행되면서 RBM보다 간단하고, 레이어 특성을 고려한 초기화 방법이 사용된다.   
+>- Xavier Glorot Initialization
+>- He Initialization or Kaiming Initialization
+
+>코드에서는 He를 사용하고 있으며, 아래와 같이 코드가 구현되어 있다.   
+
+```
+def pytorch_kaiming_weight_factor(a=0.0, activation_function='relu'):
+    if activation_function == 'relu':
+        gain = np.sqrt(2.0)
+    elif activation_function == 'leaky_relu':
+        gain = np.sqrt(2.0 / (1 + a ** 2))
+    elif activation_function == 'tanh':
+        gain = 5.0 / 3
+    else:
+        gain = 1.0
+
+    factor = gain * gain
+    mode = 'fan_in'
+
+    return factor, mode   
+```
+### 가중치 정규화(Weight Regularization)
+>모델의 복잡도를 조정하는 작업으로, 더 간단한 피팅 함수에 대해 보상을 하여 모델을 단순하게 변화시킨다.   
+>코드에서는 l2 regularizer를 사용했다.   
+
+```
+weight_regularizer = tf.keras.regularizers.l2(1e-4)
+weight_regularizer_fully = tf.keras.regularizers.l2(1e-4)
+```   
+<br/>
+
+## 스펙트럼 정규화(Spectral Normalization)
+GAN의 training 안정성을 향상하기 위해 discriminator의 각 레이어의 가중치를 largest singular value로 나눈다.   
+Lipschitz constant가 유일한 하이퍼파라미터로 실행이 간단하고, 추가적인 계산량이 적다는 장점이 있다.   
+>각 layer weight의 largest singular value는 Lipschitz norm의 역할을 한다.   
+>Lipschitz norm은 함수의 기울기를 일정 미만 (gradient의 principal direction scale)으로 제한시키는 역할을 한다.   
+>이를 spectral_norm(gradient(g(h)))로 구할 수 있는데 g(h) = Wh라면 이는 spectral_norm(W)과 같고, spectral norm은 largest singular value와 같다.   
+>Spectral normalization은 gradient의 principal direction을 적응적 정규화(adaptive regularization)하는 효과가 있다.   
+
+### 립시츠 정규화(Lipschitz normalization)
+>Lipschitz continuity는 Gradient descent 최적화 방법에서 비용함수가 해당 연속성을 띄게 되면 Gradient exploding과 같은 문제를 미연에 방지할 수 있다.   
+
+```
+class SpectralNormalization(tf.keras.layers.Wrapper):
+    def __init__(self, layer, iteration=1, eps=1e-12, training=True, **kwargs):
+        self.iteration = iteration
+        self.eps = eps
+        self.do_power_iteration = training
+        if not isinstance(layer, tf.keras.layers.Layer):
+            raise ValueError(
+                'Please initialize `TimeDistributed` layer with a '
+                '`Layer` instance. You passed: {input}'.format(input=layer))
+        super(SpectralNormalization, self).__init__(layer, **kwargs)
+
+    def build(self, input_shape=None):
+        self.layer.build(input_shape)
+
+        self.w = self.layer.kernel
+        self.w_shape = self.w.shape.as_list()
+
+        self.u = self.add_weight(shape=(1, self.w_shape[-1]),
+                                 initializer=tf.initializers.TruncatedNormal(stddev=0.02),
+                                 trainable=False,
+                                 name=self.name + '_u',
+                                 dtype=tf.float32, aggregation=tf.VariableAggregation.ONLY_FIRST_REPLICA)
+
+        super(SpectralNormalization, self).build()
+
+    def call(self, inputs, training=None, mask=None):
+        self.update_weights()
+        output = self.layer(inputs)
+        return output
+
+    def update_weights(self):
+        w_reshaped = tf.reshape(self.w, [-1, self.w_shape[-1]])
+
+        u_hat = self.u
+        v_hat = None
+
+        if self.do_power_iteration:
+            for _ in range(self.iteration):
+                v_ = tf.matmul(u_hat, tf.transpose(w_reshaped))
+                v_hat = v_ / (tf.reduce_sum(v_ ** 2) ** 0.5 + self.eps)
+
+                u_ = tf.matmul(v_hat, w_reshaped)
+                u_hat = u_ / (tf.reduce_sum(u_ ** 2) ** 0.5 + self.eps)
+
+        sigma = tf.matmul(tf.matmul(v_hat, w_reshaped), tf.transpose(u_hat))
+        self.u.assign(u_hat)
+
+        self.layer.kernel.assign(self.w / sigma)
+```
+<br/>
+
+## Adaptive Instance Normalization (AdaIN) 
+Normalization은 그룹에 따라 Batch Norm, Layer Norm, Instance Norm, Group Norm으로 나뉜다.    
+Instance Norm(IN)은 mini-batch의 하나의 데이터만 계산하여 개별 분포를 활용한 정규화   
+>content input x, style input y를 받아 채널마다 x의 평균과 분산을 y의 평균과 분산으로 조정한다.   
+
+```
+class AdaIN(tf.keras.layers.Layer):
+    def __init__(self, channels, sn=False, epsilon=1e-5, name='AdaIN'):
+        super(AdaIN, self).__init__(name=name)
+        self.channels = channels
+        self.epsilon = epsilon
+
+        self.gamma_fc = FullyConnected(units=self.channels, use_bias=True, sn=sn)
+        self.beta_fc = FullyConnected(units=self.channels, use_bias=True, sn=sn)
+
+
+    def call(self, x_init, training=True, mask=None):
+        x, style = x_init
+        x_mean, x_var = tf.nn.moments(x, axes=[1, 2], keepdims=True)
+        x_std = tf.sqrt(x_var + self.epsilon)
+
+        x_norm = ((x - x_mean) / x_std)
+
+        gamma = self.gamma_fc(style)
+        beta = self.beta_fc(style)
+
+        gamma = tf.reshape(gamma, shape=[-1, 1, 1, self.channels])
+        beta = tf.reshape(beta, shape=[-1, 1, 1, self.channels])
+
+        x = (1 + gamma) * x_norm + beta
+
+        return x
+```
+<br/>
+
+## 업샘플링(Upsmapling)
+Pooling 레이어를 거치면서 축소된 피처맵을 원본 이미지 크기로 변환하는 방법이다.   
+- Nearest Neighbor   
+기존에 가지고 있던 동일한 값으로 근접한 픽셀값에 채우는 방식   
+- Bilinear Interpolation   
+x, y의 2차원에 대해 선형 보간법을 통해 값을 채우는 방식     
+
+```
+def nearest_up_sample(x, scale_factor=2):
+    _, h, w, _ = x.get_shape().as_list()
+    new_size = [h * scale_factor, w * scale_factor]
+    return tf.image.resize(x, size=new_size, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+
+def bilinear_up_sample(x, scale_factor=2):
+    _, h, w, _ = x.get_shape().as_list()
+    new_size = [h * scale_factor, w * scale_factor]
+    return tf.image.resize(x, size=new_size, method=tf.image.ResizeMethod.BILINEAR)
+```
+
+<br/>
+
+## Discriminator Loss
+기존 GAN은 생성 결과의 성능을 손실함수로부터 판단하기 어렵고, 모드 붕괴가 일어나는 문제가 발생한다.   
+Wasserstein 거리에 의한 손실함수의 설계를 도입하여 학습이 불안정한 문제를 해결하는 방법이 있다. 이때, Lipschitz norm이 필요하다.   
+
+- Generative Adversarial Networks(GAN), Grgdient penality(GP)   
+```
+    if gan_type == 'gan' or gan_type == 'gan-gp':
+        real_loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.ones_like(real_logit),
+                logits=real_logit
+            )
+        )
+        fake_loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.zeros_like(fake_logit),
+                logits=fake_logit
+            )
+        )
+```
+- Least Squares Generative Adversarial Networks(LSGAN)   
+```
+    if gan_type == 'lsgan':
+        real_loss = tf.reduce_mean(
+            tf.math.squared_difference(
+                real_logit,
+                1.0
+            )
+        )
+        fake_loss = tf.reduce_mean(
+            tf.square(
+                fake_logit
+            )
+        )
+```
+- Hinge loss   
+Support Vector Machine 알고리즘을 위한 손실함수로, max(0, 1-t)의 형태를 가지고 있다.   
+```
+    if gan_type == 'hinge':
+        real_loss = tf.reduce_mean(Relu(1.0 - real_logit))
+        fake_loss = tf.reduce_mean(Relu(1.0 + fake_logit))
+```
+<br/>
+
+## Generator Loss
+
+- Generative Adversarial Networks(GAN), Grgdient penality(GP)   
+```
+    if gan_type == 'gan' or gan_type == 'gan-gp':
+        fake_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(fake_logit), logits=fake_logit))
+```
+- Least Squares Generative Adversarial Networks(LSGAN)   
+```
+    if gan_type == 'lsgan':
+        fake_loss = tf.reduce_mean(tf.math.squared_difference(fake_logit, 1.0))
+```
+- Hinge loss   
+```
+    if gan_type == 'hinge':
+        fake_loss = -tf.reduce_mean(fake_logit)
+```
+
+<br/>
+
+## 이미지 처리(Image Processing)
+2개의 이미지를 불러들여 처리 후 도메인과 함께 출력한다. 과정은 다음과 같다.
+1. 이미지 읽기
+2. 이미지 디코딩
+3. 이미지 크기 조정
+4. 이미지 전처리 - minmax scale(-1, 1)
+
+
+
+<br/>
+
+## References
+[1] JINSOL KIM, L1,L2 Regularization, https://gaussian37.github.io/dl-concept-regularization/   
+[2] Zinc, [정리][PyTorch] Lab-09-2 Weight initialization, https://blog.naver.com/PostView.nhn?blogId=hongjg3229&logNo=221564537122   
+[3] 업무외시간, Spectral Normalization, https://stopspoon.tistory.com/75   
+[4] 빛나는나무, Lipschitz continuity의 정의와 설명, https://light-tree.tistory.com/188   
+[5] Lifeignite, [논문 번역] 불친절한 AdaIN 논문 읽기 (Arbitrary Style Transfer in Real-Time With Adaptive Instance Normalization), 
+https://lifeignite.tistory.com/46   
+[6] cha-suyeon, 딥러닝 Segmentation(7) - Upsampling의 다양한 방법, https://velog.io/@cha-suyeon/%EB%94%A5%EB%9F%AC%EB%8B%9D-Segmentation7-Upsampling%EC%9D%98-%EB%8B%A4%EC%96%91%ED%95%9C-%EB%B0%A9%EB%B2%95   
+[7] 두더지 개발자, GAN ; WGAN & WGAN-gp, https://engineer-mole.tistory.com/52   
+[8] cha-suyeon, [혼공머] 손실 함수(loss function), 조기 종료(early stopping), hinge loss, https://velog.io/@cha-suyeon/%ED%98%BC%EA%B3%B5%EB%A8%B8#hinge-loss    

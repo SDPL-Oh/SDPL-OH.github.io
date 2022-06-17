@@ -6,6 +6,8 @@ categories: Github Blog plainwhite
 ---
 Github를 통해 블로그를 개설하는 시간이 꽤나 오래걸렸다.   
 다른 블로그에 설명이 상세하게 되어있지만, 나는 실행이 안됐다.   
+<br/>
+
 ## 적용 과정
 * Github 홈페이지에서 new repository로 github.io 생성
 * **Github on Desktop** 설치 후 clone
