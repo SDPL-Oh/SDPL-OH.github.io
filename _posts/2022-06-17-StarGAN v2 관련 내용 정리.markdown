@@ -112,7 +112,7 @@ class SpectralNormalization(tf.keras.layers.Wrapper):
 ```
 <br/>
 
-## Adaptive Instance Normalization (AdaIN) 
+## Adaptive Instance Normalization(AdaIN) 
 Normalization은 그룹에 따라 Batch Norm, Layer Norm, Instance Norm, Group Norm으로 나뉜다.    
 Instance Norm(IN)은 mini-batch의 하나의 데이터만 계산하여 개별 분포를 활용한 정규화   
 >content input x, style input y를 받아 채널마다 x의 평균과 분산을 y의 평균과 분산으로 조정한다.   
@@ -172,77 +172,129 @@ def bilinear_up_sample(x, scale_factor=2):
 기존 GAN은 생성 결과의 성능을 손실함수로부터 판단하기 어렵고, 모드 붕괴가 일어나는 문제가 발생한다.   
 Wasserstein 거리에 의한 손실함수의 설계를 도입하여 학습이 불안정한 문제를 해결하는 방법이 있다. 이때, Lipschitz norm이 필요하다.   
 
-- Generative Adversarial Networks(GAN), Grgdient penality(GP)   
+- Generative Adversarial Networks(GAN), Gradient penality(GP)   
 ```
-    if gan_type == 'gan' or gan_type == 'gan-gp':
-        real_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                labels=tf.ones_like(real_logit),
-                logits=real_logit
-            )
+if gan_type == 'gan' or gan_type == 'gan-gp':
+    real_loss = tf.reduce_mean(
+        tf.nn.sigmoid_cross_entropy_with_logits(
+            labels=tf.ones_like(real_logit),
+            logits=real_logit
         )
-        fake_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                labels=tf.zeros_like(fake_logit),
-                logits=fake_logit
-            )
+    )
+    fake_loss = tf.reduce_mean(
+        tf.nn.sigmoid_cross_entropy_with_logits(
+            labels=tf.zeros_like(fake_logit),
+            logits=fake_logit
         )
+    )
 ```
 - Least Squares Generative Adversarial Networks(LSGAN)   
 ```
-    if gan_type == 'lsgan':
-        real_loss = tf.reduce_mean(
-            tf.math.squared_difference(
-                real_logit,
-                1.0
-            )
+if gan_type == 'lsgan':
+    real_loss = tf.reduce_mean(
+        tf.math.squared_difference(
+            real_logit,
+            1.0
         )
-        fake_loss = tf.reduce_mean(
-            tf.square(
-                fake_logit
-            )
+    )
+    fake_loss = tf.reduce_mean(
+        tf.square(
+            fake_logit
         )
+    )
 ```
 - Hinge loss   
 Support Vector Machine 알고리즘을 위한 손실함수로, max(0, 1-t)의 형태를 가지고 있다.   
 ```
-    if gan_type == 'hinge':
-        real_loss = tf.reduce_mean(Relu(1.0 - real_logit))
-        fake_loss = tf.reduce_mean(Relu(1.0 + fake_logit))
+if gan_type == 'hinge':
+    real_loss = tf.reduce_mean(Relu(1.0 - real_logit))
+    fake_loss = tf.reduce_mean(Relu(1.0 + fake_logit))
 ```
 <br/>
 
 ## Generator Loss
 
-- Generative Adversarial Networks(GAN), Grgdient penality(GP)   
+- Generative Adversarial Networks(GAN), Gradient penality(GP)   
 ```
-    if gan_type == 'gan' or gan_type == 'gan-gp':
-        fake_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(fake_logit), logits=fake_logit))
+if gan_type == 'gan' or gan_type == 'gan-gp':
+    fake_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(fake_logit), logits=fake_logit))
 ```
 - Least Squares Generative Adversarial Networks(LSGAN)   
 ```
-    if gan_type == 'lsgan':
-        fake_loss = tf.reduce_mean(tf.math.squared_difference(fake_logit, 1.0))
+if gan_type == 'lsgan':
+    fake_loss = tf.reduce_mean(tf.math.squared_difference(fake_logit, 1.0))
 ```
 - Hinge loss   
 ```
-    if gan_type == 'hinge':
-        fake_loss = -tf.reduce_mean(fake_logit)
+if gan_type == 'hinge':
+    fake_loss = -tf.reduce_mean(fake_logit)
 ```
 
 <br/>
 
 ## 이미지 처리(Image Processing)
-2개의 이미지를 불러들여 처리 후 도메인과 함께 출력한다. 과정은 다음과 같다.
+2개의 이미지를 불러들여 처리 후 도메인과 함께 출력한다.   
+4단계를 거치며 학습 데이터가 준비되며, 데이터 증강 기법은 좌우반전, 크기 조정, 자르기(crop)이 적용됐다.
 1. 이미지 읽기
 2. 이미지 디코딩
 3. 이미지 크기 조정
 4. 이미지 전처리 - minmax scale(-1, 1)
 
+<br/>
+
+## Exponential Moving Average(EMA)
+모델을 학습할 때 학습된 가중치의 이동 평균을 유지하는 것이 유리하다.   
+평균 파라미터를 사용하는 평가는 최종 훈련된 파라미터를 사용할 때보다 훨씬 더 나은 결과를 생성할 때가 있다.   
+이동 평균은 지수 감쇠(exponential decay)를 사용하여 계산되며, 객체를 생성할 때 감쇠값을 지정해야 한다.    
+주로 1.0에 가까우며, 일반적으로 0.999 혹은 0.9999로 설정한다.   
+
+```
+self.generator_ema = deepcopy(self.generator)
+self.mapping_network_ema = deepcopy(self.mapping_network)
+self.style_encoder_ema = deepcopy(self.style_encoder)
+```
+
+<br/>
+
+## Diversity Sensitive Loss(DSL)
+Generator가 다양한 스타일의 이미지를 생성할 수 있도록 DSL를 사용한다.   
+우선, 두 가지 무작위 잠재 벡터(Latent Vector)를 사용하여 Style encorder가 생성한 스타일 벡터 생성한다.   
+생성된 스타일 벡터를 각각 원본 이미지와 함께 Generator의 입력으로 사용하여 데이터를 생성한다.    
+두 생성 이미지의 차이가 클수록 서로 다른 다양한 이미지가 생성되므로, 최대화하는 방향으로 학습한다.   
+DSL은 최적화 지점이 없어, 선형적으로 가중치를 줄여가며 학습에 사용한다.
+
+```
+ds_weight_init = self.ds_weight
+
+for idx in range(self.start_iteration, self.iteration):
+    iter_start_time = time.time()
+
+    # decay weight for diversity sensitive loss
+    if self.ds_weight > 0:
+        self.ds_weight = ds_weight_init - (ds_weight_init / self.ds_iter) * idx
+
+...
+
+g_ds_loss = -self.ds_weight * l1_loss(x_fake, x_fake2)
+```
 
 
 <br/>
 
+## Cycle Consistency Loss(CCL)
+순환의 일관성을 통해 원본 도메인에서 원본 이미지는 원본 이미지 그대로 출력되도록 학습되어야 한다.   
+CycleGAN에서는 2개의 생성 모델을 통해 원본 이미지로 생성한 데이터와 가짜 원본 이미지로 생성한 데이터의 특성이 같아지도록 학습했다.   
+StarGANv2에서는 원본 이미지에 해당되는 생성된 스타일 벡터와 원본 이미지를 입력으로 사용하면, 가짜 원본 이미지를 생성하도록 설정했다.   
+
+```
+# cycle-consistency loss
+s_org = self.style_encoder([x_real, y_org])
+x_rec = self.generator([x_fake, s_org])
+g_cyc_loss = self.cyc_weight * l1_loss(x_rec, x_real)
+```
+
+
+<br/>
 ## References
 [1] JINSOL KIM, L1,L2 Regularization, https://gaussian37.github.io/dl-concept-regularization/   
 [2] Zinc, [정리][PyTorch] Lab-09-2 Weight initialization, https://blog.naver.com/PostView.nhn?blogId=hongjg3229&logNo=221564537122   
@@ -253,3 +305,4 @@ https://lifeignite.tistory.com/46
 [6] cha-suyeon, 딥러닝 Segmentation(7) - Upsampling의 다양한 방법, https://velog.io/@cha-suyeon/%EB%94%A5%EB%9F%AC%EB%8B%9D-Segmentation7-Upsampling%EC%9D%98-%EB%8B%A4%EC%96%91%ED%95%9C-%EB%B0%A9%EB%B2%95   
 [7] 두더지 개발자, GAN ; WGAN & WGAN-gp, https://engineer-mole.tistory.com/52   
 [8] cha-suyeon, [혼공머] 손실 함수(loss function), 조기 종료(early stopping), hinge loss, https://velog.io/@cha-suyeon/%ED%98%BC%EA%B3%B5%EB%A8%B8#hinge-loss    
+[9] 혜링혜링, 도메인과 스타일, 모두 잡았다! StarGAN v2, https://comlini8-8.tistory.com/13

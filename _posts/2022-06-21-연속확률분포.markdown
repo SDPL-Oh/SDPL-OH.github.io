@@ -1,0 +1,36 @@
+---
+layout: post
+title:  "연속확률분포 및 관련 수학"
+date:   2022-06-21 09:00:00 +0530
+categories: GAN Probability 
+---
+WGAN-GP와 LSGAN에 대해 알아보기 위해 관련 수학적 지식을 정리했다.
+초기 시작점부터 하나씩 살펴보면서 해볼 생각이다.   
+
+
+<br/>
+
+## 확률(Probability)
+주어진 확률분포가 있고, 관측값이 분포 구간안에 들어올 확률을 나타내는 값이다.   
+확률분포가 고정되어 있는 상태이며, 이때의 확률을 구한다는 것이 중요하다.   
+여기서 확률분포는 연속확률분포를 이야기하며, 연속확률변수는 구간 사이에 있는 모든 실수를 가질 수 있는 변수를 뜻한다.   
+
+- 확률변수: 표본공간의 있는 원소들을 원하는 실수(목적)로 대응시켜주는 함수
+- 확률분포: 실수를 확률로 대응시켜주는 함수   
+
+<br/>
+
+## 우도(Likelihood)
+값이 관측되었을 때, 어떤 확률분포인지에 대한 확률이다.   
+주어진 데이터에 대해 확률분포를 그리면, 데이터를 대변하는 확률분포일수록 우도가 높아지게 된다.   
+최대우도추정(Maximum Likelihood Estimates, MLE)는 모든 우도를 확인하여 가장 높은 우도가 나타나는 분포를 찾는 것을 말한다.   
+
+<br/>
+
+## Kullback-Leibler Divergence(KL-divergence)
+두 확률분포의 차이를 계산하는 데 사용하는 함수로 어떤 이상적인 분포에 대해, 그 분포를 근사하는 다른 분포를 사용해 샘플링 한다면 발생할 수 있는 정보 엔트로피 차이를 계산한다.
+
+<br/>
+## References
+[1] Skywalk, 초보를 위한 정보이론 안내서 - KL divergence 쉽게 보기, https://hyunw.kim/blog/2017/10/27/KL_divergence.html      
+[2] 하우론, [학부생의 딥러닝] GANs | WGAN, WGAN-GP : Wassestein GAN(Gradient Penalty), https://haawron.tistory.com/21?category=752293
